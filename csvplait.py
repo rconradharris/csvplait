@@ -34,6 +34,12 @@ class CSVPlaitCmd(cmd.Cmd):
     istty = True
     prompt = "> "
     history = []
+    environ = {}
+
+    def precmd(self, line):
+        for key, value in environ.iteritems():
+            line = line.replace("$%s" % key, value)
+        return line
 
     def postcmd(self, stop, line):
         self.history.append(line)
@@ -186,11 +192,20 @@ def apostrophe_safe_title(s):
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         filename = sys.argv[1]
+
+        # Load up any specified environment variables
+        # TODO: use acutal ENVIRON too?
+        environ = {}
+        for token in sys.argv[2:]:
+            key, value = token.split('=')
+            environ[key] = value
+
         with open(filename, 'rt') as f:
             csv_cmd = CSVPlaitCmd(stdin=f)
             csv_cmd.use_rawinput = False
             csv_cmd.prompt = ''
             csv_cmd.istty = False
+            csv_cmd.environ = environ
             csv_cmd.cmdloop()
     else:
         CSVPlaitCmd().cmdloop()
