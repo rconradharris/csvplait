@@ -29,6 +29,8 @@ import prettytable
 
 
 class CSVPlaitCmd(cmd.Cmd):
+    prompt = "> "
+
     def do_load(self, line):
         filename = line
 
