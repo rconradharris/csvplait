@@ -86,6 +86,9 @@ class CSVPlaitCmd(cmd.Cmd):
         for row in self.rows:
             row.pop(col)
 
+    def do_dropheading(self, line):
+        self.rows.pop(0)
+
     def do_slice(self, line):
         start_col, end_col = line.split()
         start_col = int(start_col)
