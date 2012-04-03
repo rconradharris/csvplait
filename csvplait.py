@@ -25,12 +25,18 @@ import cmd
 import csv
 import datetime
 import re
+import sys
 
 import prettytable
 
 
 class CSVPlaitCmd(cmd.Cmd):
+    istty = True
     prompt = "> "
+
+    def say(self, msg):
+        if self.istty:
+            print msg
 
     def do_load(self, line):
         filename = line
@@ -38,7 +44,7 @@ class CSVPlaitCmd(cmd.Cmd):
         with open(filename, 'r') as f:
             self.rows = load_csv(f)
 
-        print "Loaded %s" % filename
+        self.say("Loaded %s" % filename)
 
     def do_print(self, line):
         headings = ['%d: %s' % (idx, heading) for idx, heading in
@@ -85,7 +91,7 @@ class CSVPlaitCmd(cmd.Cmd):
         with open(filename, 'wb') as f:
             write_csv(f, self.rows)
 
-        print "Wrote %s" % filename
+        self.say("Wrote %s" % filename)
 
     def do_reorder(self, line):
         col_order = [int(col) for col in line.split()]
@@ -161,4 +167,13 @@ def apostrophe_safe_title(s):
 
 
 if __name__ == '__main__':
-    CSVPlaitCmd().cmdloop()
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
+        with open(filename, 'rt') as f:
+            csv_cmd = CSVPlaitCmd(stdin=f)
+            csv_cmd.use_rawinput = False
+            csv_cmd.prompt = ''
+            csv_cmd.istty = False
+            csv_cmd.cmdloop()
+    else:
+        CSVPlaitCmd().cmdloop()
