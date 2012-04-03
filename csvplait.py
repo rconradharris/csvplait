@@ -23,6 +23,7 @@ furnished to do so, subject to the following conditions:
 """
 import cmd
 import csv
+import datetime
 import re
 
 import prettytable
@@ -96,6 +97,21 @@ class CSVPlaitCmd(cmd.Cmd):
                 new_row.append(row[col])
             rows.append(new_row)
         self.rows = rows
+
+    def do_dateformat(self, line):
+        col, rest = line.split(' ', 1)
+        col = int(col)
+        args = [x for x in rest.split('"') if x.strip()]
+        from_fmt, to_fmt = args
+
+        def transform_date(value):
+            if value:
+                dt = datetime.datetime.strptime(value, from_fmt)
+                value = dt.strftime(to_fmt)
+            return value
+
+        transform_column(self.rows[1:], col, transform_date)
+
 
     def do_EOF(self, line):
         return True
