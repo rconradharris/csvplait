@@ -35,6 +35,7 @@ class CSVPlaitCmd(cmd.Cmd):
     prompt = "> "
     history = []
     environ = {}
+    include_heading = True
 
     def precmd(self, line):
         for key, value in environ.iteritems():
@@ -70,7 +71,7 @@ class CSVPlaitCmd(cmd.Cmd):
         self.say("Loaded %s" % filename)
 
     def do_print(self, line):
-        headings = ['%d: %s' % (idx, heading) for idx, heading in
+        headings = ['%d: %s' % (idx, hdr) for idx, hdr in
                     enumerate(self.rows[0])]
 
         table = prettytable.PrettyTable(headings)
@@ -87,7 +88,7 @@ class CSVPlaitCmd(cmd.Cmd):
             row.pop(col)
 
     def do_dropheading(self, line):
-        self.rows.pop(0)
+        self.include_heading = False
 
     def do_slice(self, line):
         start_col, end_col = line.split()
@@ -112,15 +113,17 @@ class CSVPlaitCmd(cmd.Cmd):
         transform_column(self.rows[1:], col, apostrophe_safe_title)
 
     def do_write(self, line):
+        rows = self.rows if self.include_heading else self.rows[1:]
+
         if line:
             filename = line
 
             with open(filename, 'wb') as f:
-                write_csv(f, self.rows)
+                write_csv(f, rows)
 
             self.say("Wrote %s" % filename)
         else:
-            write_csv(sys.stdout, self.rows)
+            write_csv(sys.stdout, rows)
 
     def do_reorder(self, line):
         col_order = [int(col) for col in line.split()]

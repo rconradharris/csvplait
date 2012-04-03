@@ -1,5 +1,4 @@
 load $FILENAME
-dropheading
 slice 0 4
 reorder 1 3 0 2 4
 dateformat 0 "%m/%d/%Y" "%Y-%m-%d"
@@ -10,4 +9,5 @@ sub 2 Anne Alice
 sub 4 Anne Alice
 sub 2 Rick Bob
 sub 4 Rick Bob
+dropheading
 write
