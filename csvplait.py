@@ -38,7 +38,7 @@ class CSVPlaitCmd(cmd.Cmd):
     include_heading = True
 
     def precmd(self, line):
-        for key, value in environ.iteritems():
+        for key, value in self.environ.iteritems():
             line = line.replace("$%s" % key, value)
         return line
 
