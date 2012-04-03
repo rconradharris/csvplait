@@ -33,10 +33,27 @@ import prettytable
 class CSVPlaitCmd(cmd.Cmd):
     istty = True
     prompt = "> "
+    history = []
+
+    def postcmd(self, stop, line):
+        self.history.append(line)
+        return stop
 
     def say(self, msg):
         if self.istty:
             print msg
+
+    def do_history(self, line):
+        if line:
+            filename = line
+
+            with open(filename, 'w') as f:
+                f.write('\n'.join(self.history) + '\n')
+
+            self.say("Wrote history to %s" % filename)
+        else:
+            for line in self.history:
+                print line
 
     def do_load(self, line):
         filename = line
