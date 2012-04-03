@@ -109,12 +109,15 @@ class CSVPlaitCmd(cmd.Cmd):
         transform_column(self.rows[1:], col, apostrophe_safe_title)
 
     def do_write(self, line):
-        filename = line
+        if line:
+            filename = line
 
-        with open(filename, 'wb') as f:
-            write_csv(f, self.rows)
+            with open(filename, 'wb') as f:
+                write_csv(f, self.rows)
 
-        self.say("Wrote %s" % filename)
+            self.say("Wrote %s" % filename)
+        else:
+            write_csv(sys.stdout, self.rows)
 
     def do_reorder(self, line):
         col_order = [int(col) for col in line.split()]
