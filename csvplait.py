@@ -22,20 +22,167 @@ furnished to do so, subject to the following conditions:
     DEALINGS IN THE SOFTWARE.
 """
 import cmd
-import csv
+import csv as csv_module
 import datetime
+import functools
 import re
+import shlex
 import sys
 
 import prettytable
 
 
-class CSVPlaitCmd(cmd.Cmd):
+def apostrophe_safe_title(s):
+    """Like `str.title` but handles apostrophes
+
+    see http://bugs.python.org/issue7008
+    """
+    return re.sub("([a-z])'([A-Z])", lambda m: m.group(0).lower(), s.title())
+
+
+def inplace_slice(L, start, end):
+    del L[:start]
+    del L[end:]
+
+
+def inplace_reorder(L, order):
+    orig_len = len(L)
+    for i in order:
+        L.append(L[i])
+    del L[:orig_len]
+
+
+def clipstr(s, width=None):
+    if width is not None and len(s) > width:
+        s = s[:width] + '...'
+    return s
+
+
+class CSV(object):
+    def __init__(self):
+        self.col_headings = None
+        self.rows = []
+        self.num_cols = 0
+
+    def set_headings(self, col_headings=None):
+        self.col_headings = col_headings or self.rows.pop(0)
+
+    def pad_columns(self, padding=""):
+        for row in self.rows:
+            deficit = self.num_cols - len(row)
+            if deficit:
+                row.extend([padding] * deficit)
+
+    def pretty_print(self, stdout=None):
+        if self.col_headings:
+            headings = ['%d: %s' % (idx, heading) for idx, heading in
+                        enumerate(self.col_headings)]
+        else:
+            headings = map(str, range(self.num_cols))
+
+        table = prettytable.PrettyTable(headings)
+        clip_field = functools.partial(clipstr, width=25)
+        for row in self.rows:
+            row = map(clip_field, row)
+            table.add_row(row)
+
+        if stdout:
+            stdout.write(str(table))
+        else:
+            print table
+
+    def read(self, filename):
+        with open(filename, 'r') as f:
+            self.readfp(f)
+
+    def readfp(self, fp):
+        self.num_cols = 0
+        self.rows = []
+
+        for row in csv_module.reader(fp):
+            if len(row) > self.num_cols:
+                self.num_cols = len(row)
+            self.rows.append(row)
+
+        self.col_headings = None
+
+    def writefp(self, fp):
+        writer = csv_module.writer(fp)
+
+        if self.col_headings:
+            writer.writerow(self.col_headings)
+
+        writer.writerows(self.rows)
+
+    def write(self, filename=None):
+        if filename:
+            with open(filename, 'wb') as f:
+                self.writefp(f)
+        else:
+            self.writefp(sys.stdout)
+
+    def slice_columns(self, start_col, end_col):
+        for row in self.rows:
+            inplace_slice(row, start_col, end_col + 1)
+
+        if self.col_headings:
+            inplace_slice(self.col_headings, start_col, end_col + 1)
+
+        self.num_cols = len(self.rows[0])
+
+    def drop_column(self, col_num):
+        for row in self.rows:
+            row.pop(col_num)
+
+        if self.col_headings:
+            self.col_headings.pop(col_num)
+        self.num_cols = len(self.rows[0])
+
+    def reorder_columns(self, col_nums):
+        for row in self.rows:
+            inplace_reorder(row, col_nums)
+
+        if self.col_headings:
+            inplace_reorder(self.col_headings, col_nums)
+
+    def _transform_column(self, col_num, func):
+        for row in self.rows:
+            row[col_num] = func(row[col_num])
+
+    def date_format(self, col_num, orig_fmt, new_fmt):
+        def transform_date(value):
+            if value:
+                dt = datetime.datetime.strptime(value, orig_fmt)
+                value = dt.strftime(new_fmt)
+            return value
+
+        self._transform_column(col_num, transform_date)
+
+    def titleize(self, col_num):
+        self._transform_column(col_num, apostrophe_safe_title)
+
+    def substitute_string(self, col_num, orig_str, new_str):
+        self._transform_column(
+            col_num, lambda x: new_str if x == orig_str else x)
+
+    def drop_headings(self):
+        self.col_headings = None
+
+
+class CSVCmd(cmd.Cmd):
+    csv = CSV()
+
     istty = True
     prompt = "> "
     history = []
     environ = {}
-    include_heading = True
+
+    def oops(self, msg):
+        print 'Error: %s' % msg
+
+    def say(self, msg):
+        if self.istty:
+            print msg
 
     def precmd(self, line):
         for key, value in self.environ.iteritems():
@@ -45,10 +192,6 @@ class CSVPlaitCmd(cmd.Cmd):
     def postcmd(self, stop, line):
         self.history.append(line)
         return stop
-
-    def say(self, msg):
-        if self.istty:
-            print msg
 
     def do_history(self, line):
         if line:
@@ -62,140 +205,70 @@ class CSVPlaitCmd(cmd.Cmd):
             for line in self.history:
                 print line
 
-    def do_load(self, line):
+    def do_read(self, line):
         filename = line
-
-        with open(filename, 'r') as f:
-            self.rows = load_csv(f)
-
+        self.csv.read(filename)
+        self.csv.pad_columns()
         self.say("Loaded %s" % filename)
 
-    def do_print(self, line):
-        headings = ['%d: %s' % (idx, hdr) for idx, hdr in
-                    enumerate(self.rows[0])]
+    def do_write(self, line):
+        filename = line
+        self.csv.write(filename)
+        if filename:
+            self.say("Wrote %s" % filename)
 
-        table = prettytable.PrettyTable(headings)
+    def do_pp(self, line):
+        if self.csv.rows:
+            self.csv.pretty_print()
+        else:
+            self.oops("No CSV file loaded")
 
-        for row in self.rows[1:]:
-            row = _clip_fields(row, 25)
-            table.add_row(row)
-
-        print table
-
-    def do_drop(self, line):
-        col = int(line)
-        for row in self.rows:
-            row.pop(col)
-
-    def do_dropheading(self, line):
-        self.include_heading = False
+    def do_setheading(self, line):
+        self.csv.set_headings()
 
     def do_slice(self, line):
-        start_col, end_col = line.split()
-        start_col = int(start_col)
-        end_col = int(end_col)
-        rows = []
-        for row in self.rows:
-            rows.append(row[start_col:end_col + 1])
-        self.rows = rows
+        start_col, end_col = map(int,  line.split())
+        self.csv.slice_columns(start_col, end_col)
 
-    def do_sub(self, line):
-        col, findstr, replace = line.split()
-        col = int(col)
-
-        def replace_func(value):
-            return replace if value == findstr else value
-
-        transform_column(self.rows[1:], col, replace_func)
-
-    def do_titleize(self, line):
-        col = int(line)
-        transform_column(self.rows[1:], col, apostrophe_safe_title)
-
-    def do_write(self, line):
-        rows = self.rows if self.include_heading else self.rows[1:]
-
-        if line:
-            filename = line
-
-            with open(filename, 'wb') as f:
-                write_csv(f, rows)
-
-            self.say("Wrote %s" % filename)
-        else:
-            write_csv(sys.stdout, rows)
+    def do_drop(self, line):
+        col_nums = map(int, line.split())
+        # NOTE: need to drop columns in reverse order so the indexes don't
+        # change out from under us
+        for col_num in sorted(col_nums, reverse=True):
+            self.csv.drop_column(col_num)
 
     def do_reorder(self, line):
-        col_order = [int(col) for col in line.split()]
-        # TODO: validate that col_order values make sense
-        rows = []
-        for row in self.rows:
-            new_row = []
-            for col in col_order:
-                new_row.append(row[col])
-            rows.append(new_row)
-        self.rows = rows
+        col_nums = map(int, line.split())
+        self.csv.reorder_columns(col_nums)
 
     def do_dateformat(self, line):
-        col, rest = line.split(' ', 1)
-        col = int(col)
-        args = [x for x in rest.split('"') if x.strip()]
-        from_fmt, to_fmt = args
+        args = shlex.split(line)
+        orig_fmt = args.pop(0)
+        new_fmt = args.pop(0)
+        col_nums = map(int, args)
 
-        def transform_date(value):
-            if value:
-                dt = datetime.datetime.strptime(value, from_fmt)
-                value = dt.strftime(to_fmt)
-            return value
+        for col_num in col_nums:
+            self.csv.date_format(col_num, orig_fmt, new_fmt)
 
-        transform_column(self.rows[1:], col, transform_date)
+    def do_titleize(self, line):
+        col_nums = map(int, line.split())
+        for col_num in col_nums:
+            self.csv.titleize(col_num)
 
+    def do_substr(self, line):
+        args = shlex.split(line)
+        orig_str = args.pop(0)
+        new_str = args.pop(0)
+        col_nums = map(int, args)
+
+        for col_num in col_nums:
+            self.csv.substitute_string(col_num, orig_str, new_str)
+
+    def do_dropheading(self, line):
+        self.csv.drop_headings()
 
     def do_EOF(self, line):
         return True
-
-
-def _clip_fields(row, width):
-    clipped_row = []
-    for field in row:
-        if len(field) > width:
-            field = field[:width] + '...'
-        clipped_row.append(field)
-    return clipped_row
-
-
-def load_csv(fileobj):
-    max_cols = 0
-    rows = []
-    reader = csv.reader(fileobj)
-    for row in reader:
-        rows.append(row)
-        if len(row) > max_cols:
-            max_cols = len(row)
-
-    # pad columns
-    for row in rows:
-        if max_cols > len(row):
-            row.extend([""] * (max_cols - len(row)))
-    return rows
-
-
-def write_csv(fileobj, rows):
-    writer = csv.writer(fileobj)
-    writer.writerows(rows)
-
-
-def transform_column(rows, col, func):
-    for row in rows:
-        row[col] = func(row[col])
-
-
-def apostrophe_safe_title(s):
-    """Like `str.title` but handles apostrophes
-
-    see http://bugs.python.org/issue7008
-    """
-    return re.sub("([a-z])'([A-Z])", lambda m: m.group(0).lower(), s.title())
 
 
 if __name__ == '__main__':
@@ -210,11 +283,11 @@ if __name__ == '__main__':
             environ[key] = value
 
         with open(filename, 'rt') as f:
-            csv_cmd = CSVPlaitCmd(stdin=f)
+            csv_cmd = CSVCmd(stdin=f)
             csv_cmd.use_rawinput = False
             csv_cmd.prompt = ''
             csv_cmd.istty = False
             csv_cmd.environ = environ
             csv_cmd.cmdloop()
     else:
-        CSVPlaitCmd().cmdloop()
+        CSVCmd().cmdloop()
