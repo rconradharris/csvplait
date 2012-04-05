@@ -194,6 +194,10 @@ class CSVCmd(cmd.Cmd):
         return stop
 
     def do_history(self, line):
+        """history [filename] - write out history
+
+Writes to stdout if filename isn't specified.
+"""
         if line:
             filename = line
 
@@ -206,31 +210,42 @@ class CSVCmd(cmd.Cmd):
                 print line
 
     def do_read(self, line):
+        """read <filename> - reads in a CSV file"""
         filename = line
         self.csv.read(filename)
         self.csv.pad_columns()
         self.say("Loaded %s" % filename)
 
     def do_write(self, line):
+        """write [filename] - writes out CSV file
+
+Writes to stdout if filename isn't specified.
+        """
         filename = line
         self.csv.write(filename)
         if filename:
             self.say("Wrote %s" % filename)
 
     def do_pp(self, line):
+        """pp - pretty-print data"""
         if self.csv.rows:
             self.csv.pretty_print()
         else:
             self.oops("No CSV file loaded")
 
     def do_setheading(self, line):
+        """setheading - interpret first line of data as column headings"""
         self.csv.set_headings()
 
     def do_slice(self, line):
+        """slice <start col> <end col> - keep only columns between start and \
+end inclusive.
+        """
         start_col, end_col = map(int,  line.split())
         self.csv.slice_columns(start_col, end_col)
 
     def do_drop(self, line):
+        """drop [cols] - a list of columns to drop"""
         col_nums = map(int, line.split())
         # NOTE: need to drop columns in reverse order so the indexes don't
         # change out from under us
@@ -238,10 +253,17 @@ class CSVCmd(cmd.Cmd):
             self.csv.drop_column(col_num)
 
     def do_reorder(self, line):
+        """reorder <col order> - reorders the column according to specified \
+pattern
+        """
+
         col_nums = map(int, line.split())
         self.csv.reorder_columns(col_nums)
 
     def do_dateformat(self, line):
+        """dateformat <orig fmt> <new fmt> [cols] - reformat the cols from \
+the original date format to the new date format
+        """
         args = shlex.split(line)
         orig_fmt = args.pop(0)
         new_fmt = args.pop(0)
@@ -251,11 +273,15 @@ class CSVCmd(cmd.Cmd):
             self.csv.date_format(col_num, orig_fmt, new_fmt)
 
     def do_titleize(self, line):
+        """titleize [cols] - title-capitalize a set of columns"""
         col_nums = map(int, line.split())
         for col_num in col_nums:
             self.csv.titleize(col_num)
 
     def do_substr(self, line):
+        """substr <orig str> <new str> [cols] - replace original string with \
+new string across a set of columns
+        """
         args = shlex.split(line)
         orig_str = args.pop(0)
         new_str = args.pop(0)
@@ -265,6 +291,7 @@ class CSVCmd(cmd.Cmd):
             self.csv.substitute_string(col_num, orig_str, new_str)
 
     def do_dropheading(self, line):
+        """dropheading - don't display the heading"""
         self.csv.drop_headings()
 
     def do_EOF(self, line):
